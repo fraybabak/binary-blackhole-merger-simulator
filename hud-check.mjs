@@ -273,13 +273,15 @@ check('phase restarted to inspiral', sgra.badge === 'INSPIRAL', sgra.badge);
 check('T_c ≈ 2 days', /2d/.test(sgra.tc), sgra.tc);
 
 // Fast-forward hard (10⁴×) and confirm the SMBH run also reaches merger and
-// fires its own capture with remnant ≈ 7.5M M☉.
+// fires its own capture with remnant ≈ 7.5M M☉. The 51-hour inspiral takes
+// ~21 s of wall time at 10⁴×; wait on the capture panel itself.
 await page.fill('#ctrl-timescale', '10000');
 await page.dispatchEvent('#ctrl-timescale', 'input');
-await page.waitForFunction(
-  () => parseInt(document.getElementById('coalescence-pct').textContent) >= 100,
-  { timeout: 60000 },
+const smbMerged = await page.waitForFunction(
+  () => !document.getElementById('merger-event').hidden,
+  { timeout: 90000 },
 ).then(() => true).catch(() => false);
+if (!smbMerged) console.log('  (warning: Sgr A* capture did not appear within 90 s)');
 await page.waitForTimeout(600);
 const sgraCapture = await page.evaluate(() => ({
   visible: !document.getElementById('merger-event').hidden,
