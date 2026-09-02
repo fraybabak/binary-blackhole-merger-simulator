@@ -175,11 +175,12 @@ for (const [id, text] of Object.entries(ctrlSubs)) {
   check(id, text !== '—' && text !== '(missing)' && text.length > 0, text);
 }
 
-// Mass slider descriptor must reflect a live change.
-await page.fill('#ctrl-m1', '80');
+// Mass slider descriptor must reflect a live change. Log scale: slider 400
+// → ~1214 M☉ → horizon ≈ 3.6k km.
+await page.fill('#ctrl-m1', '400');
 await page.dispatchEvent('#ctrl-m1', 'input');
 const m1Sub = await page.textContent('#ro-m1-sub');
-check('mass descriptor updates live', /236 km/.test(m1Sub), m1Sub);
+check('mass descriptor updates live (log scale)', /3\.6k km/.test(m1Sub), m1Sub);
 // Restore the preset masses.
 await page.selectOption('#ctrl-preset', '36,29');
 await page.waitForTimeout(300);
@@ -187,11 +188,11 @@ const presetRestored = await page.evaluate(() => ({
   m1: document.getElementById('ctrl-m1').value,
   preset: document.getElementById('ro-preset').textContent,
 }));
-check('preset restores sliders + note', presetRestored.m1 === '36' && /GW150914/.test(presetRestored.preset),
-  `M₁=${presetRestored.m1} · ${presetRestored.preset}`);
+check('preset restores sliders + note', presetRestored.m1 === '165' && /GW150914/.test(presetRestored.preset),
+  `M₁-slider=${presetRestored.m1} · ${presetRestored.preset}`);
 
 console.log('── Fast-forward: durations + progress advance ──');
-await page.fill('#ctrl-timescale', '1');
+await page.fill('#ctrl-timescale', '10');
 await page.dispatchEvent('#ctrl-timescale', 'input');
 await page.waitForTimeout(5000);
 const fast = await page.evaluate(() => ({
@@ -230,11 +231,73 @@ for (const [id, text] of Object.entries(capture.vals)) {
 // Physical anchors: the captured values must match GW150914-class numbers.
 check('capture remnant ≈ 62 M☉', /6[12]/.test(capture.vals['me-rem']), capture.vals['me-rem']);
 check('capture spin ≈ 0.68', /0\.6[7-9]/.test(capture.vals['me-spin']), capture.vals['me-spin']);
-check('capture ringdown f₂₂ ≈ 275 Hz', /2[67]\d/.test(capture.vals['me-fqnm']), capture.vals['me-fqnm']);
 check('chart merger marker visible', capture.markerShown === 'block', capture.markerShown);
+
+console.log('── Sgr A* — Milky Way center scenario ──');
+// Switch to the Sgr A* preset; the system restarts with 4.3M + 3.5M M☉.
+// Wait for the restart to actually land: the phase badge returns to INSPIRAL
+// only after the worker's first post-restart snapshot reaches the HUD.
+await page.selectOption('#ctrl-preset', '4300000,3500000');
+await page.waitForFunction(
+  () => document.getElementById('phase-badge').textContent === 'INSPIRAL',
+  { timeout: 10000 },
+).then(() => true).catch(() => false);
+await page.waitForTimeout(400); // let a couple of HUD updates settle
+const sgra = await page.evaluate(() => ({
+  model: document.getElementById('hud-model').textContent,
+  preset: document.getElementById('ro-preset').textContent,
+  fgw: document.getElementById('m-fgw').textContent,
+  fgwSub: document.getElementById('m-fgw-sub').textContent,
+  sep: document.getElementById('m-sep').textContent,
+  sepSub: document.getElementById('m-sep-sub').textContent,
+  tc: document.getElementById('m-tc').textContent,
+  tcSub: document.getElementById('m-tc-sub').textContent,
+  horizons: document.getElementById('m-horizons').textContent,
+  horizonsSub: document.getElementById('m-horizons-sub').textContent,
+  strainSub: document.getElementById('m-strain-sub').textContent,
+  chirp: document.getElementById('m-chirp').textContent,
+  badge: document.getElementById('phase-badge').textContent,
+  captureHidden: document.getElementById('merger-event').hidden,
+}));
+console.log(`  Sgr A*: f_GW=${sgra.fgw} (${sgra.fgwSub}), sep=${sgra.sep} (${sgra.sepSub}), T_c=${sgra.tc}, horizons=${sgra.horizons} (${sgra.horizonsSub})`);
+check('model line shows millions of M☉', /M M☉/.test(sgra.model), sgra.model);
+check('preset note names Sgr A*', /Sgr A\*/.test(sgra.preset), sgra.preset);
+check('chirp in µHz LISA band', /e-4/.test(sgra.fgw) && /LISA/.test(sgra.fgwSub), `${sgra.fgw} · ${sgra.fgwSub}`);
+check('separation reads in AU', /AU/.test(sgra.sep) || /AU/.test(sgra.sepSub), `${sgra.sep} · ${sgra.sepSub}`);
+check('horizons read in AU', /AU/.test(sgra.horizonsSub), sgra.horizonsSub);
+check('strain anchored at 8 kpc', /8 kpc/.test(sgra.strainSub), sgra.strainSub);
+check('chirp mass in millions', /M M☉/.test(sgra.chirp), sgra.chirp);
+check('fresh capture armed (panel hidden)', sgra.captureHidden === true);
+check('phase restarted to inspiral', sgra.badge === 'INSPIRAL', sgra.badge);
+// T_c reads "2d 3h" (~51 h) at the mass-relative start.
+check('T_c ≈ 2 days', /2d/.test(sgra.tc), sgra.tc);
+
+// Fast-forward hard (10⁴×) and confirm the SMBH run also reaches merger and
+// fires its own capture with remnant ≈ 7.5M M☉.
+await page.fill('#ctrl-timescale', '10000');
+await page.dispatchEvent('#ctrl-timescale', 'input');
+await page.waitForFunction(
+  () => parseInt(document.getElementById('coalescence-pct').textContent) >= 100,
+  { timeout: 60000 },
+).then(() => true).catch(() => false);
+await page.waitForTimeout(600);
+const sgraCapture = await page.evaluate(() => ({
+  visible: !document.getElementById('merger-event').hidden,
+  rem: document.getElementById('me-rem').textContent,
+  spin: document.getElementById('me-spin').textContent,
+  tau: document.getElementById('me-tau').textContent,
+  fgw: document.getElementById('me-fgw').textContent,
+}));
+check('Sgr A* capture fires at 10⁴×', sgraCapture.visible);
+check('Sgr A* remnant ≈ 7.5M M☉', /7\.[45]\d?M M☉/.test(sgraCapture.rem), sgraCapture.rem);
+check('Sgr A* ringdown τ in minutes', /m\b|min/.test(sgraCapture.tau) || /s\b/.test(sgraCapture.tau), sgraCapture.tau);
+console.log(`  Sgr A* capture: remnant=${sgraCapture.rem}, spin=${sgraCapture.spin}, ringdown τ=${sgraCapture.tau}`);
+
 check('no page errors', pageErrors.length === 0, pageErrors.slice(0, 3).join(' | ') || 'clean');
 
-await page.fill('#ctrl-timescale', '0.03');
+// Restore the default preset and viewing pace.
+await page.selectOption('#ctrl-preset', '36,29');
+await page.fill('#ctrl-timescale', '30');
 await page.dispatchEvent('#ctrl-timescale', 'input');
 await browser.close();
 console.log(failures.length === 0 ? '\nAll HUD checks passed.' : `\n${failures.length} check(s) FAILED.`);

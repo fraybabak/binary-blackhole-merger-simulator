@@ -94,5 +94,27 @@ check('chirp mass updated live', Math.abs(after[SNAPSHOT.CHIRP_MASS] - 42.47) < 
   `M_c = ${after[SNAPSHOT.CHIRP_MASS].toFixed(2)} M☉ (expected ≈ 42.5 for 60+40)`);
 check('phase still inspiral after mutation', after[SNAPSHOT.PHASE] === 0);
 
+console.log('── Sgr A* — Milky Way center (supermassive) ──');
+// Restart with Sgr A*-class masses and verify the LISA-band chirp: the
+// mass-relative start frequency must put a 7.8M M☉ binary at ~133 µHz with a
+// ~51-hour time to coalescence — not inside its own horizon.
+snaps.length = 0;
+fakeNow = 0;
+messageHandler({ data: { type: 'restart', m1: 4.3e6, m2: 3.5e6 } });
+fakeNow += 16; // advance the fake clock and tick once to post a snapshot
+api.tick();
+const sgra = snaps[snaps.length - 1];
+check('Sgr A* chirp ≈ 133 µHz', Math.abs(sgra[SNAPSHOT.F_GW] - 1.33e-4) < 2e-5,
+  `f_GW = ${sgra[SNAPSHOT.F_GW].toExponential(3)} Hz (LISA band)`);
+check('Sgr A* T_c ≈ 51 h', Math.abs(sgra[SNAPSHOT.T_C] / 3600 - 51) < 5,
+  `T_c = ${(sgra[SNAPSHOT.T_C] / 3600).toFixed(1)} h`);
+check('Sgr A* start separation > contact', sgra[SNAPSHOT.SEP_KM] > 1.05 * 2 * 7.8e6 * 1.476625,
+  `r = ${(sgra[SNAPSHOT.SEP_KM] / 1.496e8).toFixed(2)} AU vs contact ≈ ${(1.05 * 2 * 7.8e6 * 1.476625 / 1.496e8).toFixed(2)} AU`);
+check('Sgr A* strain at 8 kpc is strong', sgra[SNAPSHOT.STRAIN] > 1e-14,
+  `h = ${sgra[SNAPSHOT.STRAIN].toExponential(2)} (Galactic-center distance)`);
+check('Sgr A* all values finite', Array.from(sgra).every(Number.isFinite));
+// Restore the GW150914 default for any subsequent use.
+messageHandler({ data: { type: 'restart', m1: 36, m2: 29 } });
+
 console.log(failures.length === 0 ? '\nAll physics checks passed.' : `\n${failures.length} check(s) FAILED.`);
 process.exit(failures.length === 0 ? 0 : 1);

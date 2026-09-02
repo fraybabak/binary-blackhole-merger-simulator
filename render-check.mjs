@@ -71,13 +71,13 @@ check('lensing pass rendering', inspiralStats.litFrac > 0.02,
 console.log('  saved shot-inspiral.png');
 
 // Fast-forward to the merger: crank the time scale, wait, capture.
-await page.fill('#ctrl-timescale', '1');
+await page.fill('#ctrl-timescale', '10');
 await page.dispatchEvent('#ctrl-timescale', 'input');
 await page.waitForTimeout(6000);
 await page.screenshot({ path: 'shot-merger.png' });
-console.log('  saved shot-merger.png (timeScale = 1.0, ~6 s of evolution)');
+console.log('  saved shot-merger.png (timeScale = 10×, ~6 s of evolution)');
 
-// Ringdown: a few more seconds at real time.
+// Ringdown: a few more seconds at the same pace.
 await page.waitForTimeout(4000);
 await page.screenshot({ path: 'shot-ringdown.png' });
 console.log('  saved shot-ringdown.png');
@@ -86,8 +86,8 @@ console.log('  saved shot-ringdown.png');
 const badge = await page.textContent('#phase-badge');
 console.log(`  phase badge after fast-forward: ${badge}`);
 
-// Restore slow motion.
-await page.fill('#ctrl-timescale', '0.03');
+// Restore the default viewing pace.
+await page.fill('#ctrl-timescale', '30');
 await page.dispatchEvent('#ctrl-timescale', 'input');
 
 if (logs.length) {

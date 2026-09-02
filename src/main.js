@@ -324,8 +324,8 @@ function updateHud(s) {
   checkMergerCapture(s);
 
   // Model line + time scale in the subtitle.
-  dom.model.textContent = `M₁ ${ctrlM1.value} M☉ + M₂ ${ctrlM2.value} M☉`;
-  dom.timeScaleRo.textContent = `${timeScaleUI.toFixed(3)}× time`;
+  dom.model.textContent = `M₁ ${fmtMass(sliderToMass(ctrlM1.value))} + M₂ ${fmtMass(sliderToMass(ctrlM2.value))}`;
+  dom.timeScaleRo.textContent = `${timeScaleUI >= 1 ? timeScaleUI.toFixed(0) : timeScaleUI.toFixed(3)}× time`;
 
   // Coalescence progress: whole-run fraction from inspiral start → merged.
   // RUN_PROGRESS is time-linear through the inspiral (1 − (r/r₀)⁴), with the
@@ -336,16 +336,22 @@ function updateHud(s) {
   dom.coalescencePct.textContent = `${pct}%`;
   dom.coalescenceFill.style.width = `${pct}%`;
 
-  // Separation + descriptive companion (Sun-to-Earth multiples).
-  dom.sep.textContent = fmt(s[SNAPSHOT.SEP_KM], 1, ' km');
+  // Separation + descriptive companion: AU for supermassive binaries (Sgr A*
+  // starts at ~1.4 AU), Mars–Sun multiples for stellar ones.
+  dom.sep.textContent = fmtKm(s[SNAPSHOT.SEP_KM]);
   const au = s[SNAPSHOT.SEP_KM] / 1.496e8; // 1 AU = 1.496e8 km
   dom.sepSub.textContent =
-    s[SNAPSHOT.SEP_KM] >= 1.496e8 ? `${fmt(au, 2, ' AU')}` : `${fmt(s[SNAPSHOT.SEP_KM] / 6779, 1, '× Mars–Sun')}`;
+    au >= 0.01 ? `${fmt(au, 2, ' AU')}` : `${fmt(s[SNAPSHOT.SEP_KM] / 6779, 1, '× Mars–Sun')}`;
 
-  // GW frequency + where it sits relative to the LIGO band (10–1000 Hz).
+  // GW frequency + where it sits relative to the detection bands.
+  // Stellar-mass binaries chirp through LIGO (10–10³ Hz); supermassive
+  // binaries like Sgr A* chirp in the µHz–mHz LISA band instead.
   const fgw = s[SNAPSHOT.F_GW];
   dom.fgw.textContent = fgw >= 1 ? fmt(fgw, 1, ' Hz') : fmtSci(fgw, 2, ' Hz');
-  if (fgw < 10) dom.fgwSub.textContent = 'below LIGO band (<10 Hz)';
+  if (fgw < 1e-4) dom.fgwSub.textContent = 'below LISA band (<0.1 mHz)';
+  else if (fgw < 1e-3) dom.fgwSub.textContent = 'LISA low band';
+  else if (fgw < 0.1) dom.fgwSub.textContent = 'LISA sensitive band (mHz)';
+  else if (fgw < 10) dom.fgwSub.textContent = 'below LIGO band';
   else if (fgw < 100) dom.fgwSub.textContent = 'in LIGO low band';
   else if (fgw < 1000) dom.fgwSub.textContent = 'LIGO sensitive band';
   else dom.fgwSub.textContent = 'ringdown frequencies';
@@ -370,38 +376,55 @@ function updateHud(s) {
     dom.tcSub.textContent = 'coalescence complete';
   }
 
-  // Strain + a physical anchor (fraction of a proton width).
+  // Strain + a physical anchor: how much an interferometer arm stretches.
+  // The Milky-Way-center run is shown at the Sgr A* distance (8 kpc ≈ 26k ly)
+  // instead of GW150914's 410 Mpc, since that is where such a merger would be.
   const h = s[SNAPSHOT.STRAIN];
   dom.strain.textContent = fmtSci(h, 2, '');
+  const totalMNow = sliderToMass(ctrlM1.value) + sliderToMass(ctrlM2.value);
+  const isSmbh = totalMNow >= 1e5;
   dom.strainSub.textContent =
-    h > 0 ? `ΔL/L — ${fmtSci(h * 410e6, 2, ' m over 410 Mpc')}` : '—';
+    h > 0
+      ? isSmbh
+        ? `ΔL/L — ${fmtSci(h * 2.47e17, 2, ' m over 8 kpc (Sgr A*)')}`
+        : `ΔL/L — ${fmtSci(h * 410e6, 2, ' m over 410 Mpc')}`
+      : '—';
 
   // Chirp mass + mass ratio context.
-  dom.chirp.textContent = fmt(s[SNAPSHOT.CHIRP_MASS], 2, ' M☉');
-  const ratio = Number(ctrlM1.value) / Number(ctrlM2.value);
+  dom.chirp.textContent = s[SNAPSHOT.CHIRP_MASS] >= 1e4 ? fmtMass(s[SNAPSHOT.CHIRP_MASS]) : fmt(s[SNAPSHOT.CHIRP_MASS], 2, ' M☉');
+  const ratio = sliderToMass(ctrlM1.value) / sliderToMass(ctrlM2.value);
   dom.chirpSub.textContent = `q = ${fmt(ratio, 2)} mass ratio`;
 
   // Energy radiated + descriptive comparison.
   const erad = s[SNAPSHOT.E_RAD];
-  dom.erad.textContent = fmt(erad, 3, ' M☉c²');
+  dom.erad.textContent = erad >= 1e4 ? fmtMass(erad) : fmt(erad, 3, ' M☉c²');
   // Sun's total lifetime output ≈ 0.007 M☉c² (0.7% fusion efficiency).
+  // For supermassive runs this comparison can exceed a galaxy of stars —
+  // cap the descriptor to scientific notation so it stays readable.
+  const sunsEq = erad / 0.007;
   dom.eradSub.textContent =
-    erad > 0 ? `≈ ${fmt(erad / 0.007, 0, ' Suns (lifetime)')}` : '—';
+    erad > 0
+      ? sunsEq >= 1e6
+        ? `≈ ${fmtSci(sunsEq, 2, ' Suns (lifetime)')}`
+        : `≈ ${fmt(sunsEq, 0, ' Suns (lifetime)')}`
+      : '—';
 
   // GW luminosity + comparison to the entire observable universe.
   const lum = s[SNAPSHOT.GW_LUMINOSITY];
   dom.lum.textContent = lum > 0 ? fmtSci(lum, 2, ' M☉c²/s') : '—';
-  // All stars shine ~1e49 W ≈ 5.6e23 M☉c²/s; peak BBH merger ≈ 3.6e49 W.
+  // All stars shine ~1e49 W ≈ 56 M☉c²/s (1 M☉c² = 1.79e47 J); GW150914 peaked
+  // at 3.6e49 W ≈ 200 M☉c²/s — ~3.6× every star in the universe combined.
+  const ALL_STARLIGHT = 56; // M☉c²/s
   dom.lumSub.textContent =
-    lum > 5.6e23 ? `outshines every star in the universe`
-      : lum > 0 ? `${fmtSci(lum / 5.6e23, 1, '× all starlight')}`
+    lum > ALL_STARLIGHT ? `outshines every star in the universe`
+      : lum > 0 ? `${fmtSci(lum / ALL_STARLIGHT, 1, '× all starlight')}`
         : '—';
 
   // Remnant mass + mass lost to gravitational waves.
   const rem = s[SNAPSHOT.M_REMNANT];
-  dom.rem.textContent = rem > 0 ? fmt(rem, 2, ' M☉') : '—';
+  dom.rem.textContent = rem > 0 ? fmtMass(rem) : '—';
   dom.remSub.textContent =
-    rem > 0 ? `${fmt(Number(ctrlM1.value) + Number(ctrlM2.value) - rem, 2, ' M☉ lost as GWs')}` : 'awaiting merger';
+    rem > 0 ? `${fmtMass(sliderToMass(ctrlM1.value) + sliderToMass(ctrlM2.value) - rem)} lost as GWs` : 'awaiting merger';
 
   // Final spin + descriptive context.
   const spin = s[SNAPSHOT.REMNANT_SPIN];
@@ -418,22 +441,27 @@ function updateHud(s) {
   dom.simtimeSub.textContent = fmtDurationDesc(simtime);
 
   // Time scale + what it means in practice.
-  dom.timescale.textContent = `${timeScaleUI.toFixed(3)}×`;
-  // The scale maps wall seconds → physical seconds: a scale of 0.03 means ONE
-  // real second advances THIRTY physical seconds (fast-forward viewing).
+  dom.timescale.textContent = timeScaleUI >= 1 ? `${timeScaleUI.toFixed(0)}×` : `${timeScaleUI.toFixed(3)}×`;
+  // The scale maps wall seconds → physical seconds: <1 is slow-motion detail,
+  // >1 is fast-forward (supermassive runs need ~10³–10⁴× to fit days into a
+  // watchable span).
   dom.timescaleSub.textContent =
-    timeScaleUI >= 1 ? 'real time'
-      : timeScaleUI >= 0.1 ? 'mild fast-forward'
+    timeScaleUI >= 1000 ? `1 real second = ${(timeScaleUI / 1000).toFixed(1)}k sim seconds`
+      : timeScaleUI >= 1 ? `1 real second = ${timeScaleUI.toFixed(0)} sim seconds`
         : timeScaleUI > 0 ? `1 real second = ${(1 / timeScaleUI).toFixed(0)} sim seconds`
           : 'frozen (scale = 0)';
 
-  // Horizon radii + a size comparison anchor.
-  dom.horizons.textContent = `${fmt(s[SNAPSHOT.HORIZON_KM1], 1)} / ${fmt(
-    s[SNAPSHOT.HORIZON_KM2], 1)} km`;
+  // Horizon radii + a size comparison anchor (Sun radii for stellar masses,
+  // AU for supermassive ones like Sgr A*).
+  dom.horizons.textContent = `${fmtKm(s[SNAPSHOT.HORIZON_KM1])} / ${fmtKm(
+    s[SNAPSHOT.HORIZON_KM2])}`;
   const rSun = 696340; // Sun radius, km
+  const combinedKm = s[SNAPSHOT.HORIZON_KM1] + s[SNAPSHOT.HORIZON_KM2];
   dom.horizonsSub.textContent =
     s[SNAPSHOT.HORIZON_KM1] > 0
-      ? `combined ≈ ${fmt((s[SNAPSHOT.HORIZON_KM1] + s[SNAPSHOT.HORIZON_KM2]) / rSun, 2, '× Sun radius')}`
+      ? combinedKm >= 1.496e8 * 0.01 // >1% of an AU ⇒ express in AU
+        ? `combined ≈ ${fmt(combinedKm / 1.496e8, 2, ' AU')}`
+        : `combined ≈ ${fmt(combinedKm / rSun, 2, '× Sun radius')}`
       : '—';
 
   // Orbits remaining until coalescence (from f_GW: N = f_orb × T_c).
@@ -516,11 +544,11 @@ function checkMergerCapture(s) {
     event: 'binary black hole merger — horizon contact',
     capturedAt: new Date().toISOString(),
     system: {
-      m1_solar: Number(ctrlM1.value),
-      m2_solar: Number(ctrlM2.value),
-      total_mass_solar: Number(ctrlM1.value) + Number(ctrlM2.value),
+      m1_solar: sliderToMass(ctrlM1.value),
+      m2_solar: sliderToMass(ctrlM2.value),
+      total_mass_solar: sliderToMass(ctrlM1.value) + sliderToMass(ctrlM2.value),
       chirp_mass_solar: s[SNAPSHOT.CHIRP_MASS],
-      mass_ratio_q: Number(ctrlM1.value) / Number(ctrlM2.value),
+      mass_ratio_q: sliderToMass(ctrlM1.value) / sliderToMass(ctrlM2.value),
     },
     moment: {
       sim_time_s: s[SNAPSHOT.SIM_TIME],
@@ -566,7 +594,7 @@ function fillMergerPanel() {
   dom.meSep.textContent = fmt(m.separation_km, 1, ' km');
   dom.meErad.textContent = fmt(m.energy_radiated_to_contact_msun_c2, 3, ' M☉c²');
   dom.meEradTotal.textContent = fmt(rem.energy_radiated_total_msun_c2, 3, ' M☉c²');
-  dom.meRem.textContent = fmt(rem.mass_solar, 2, ' M☉');
+  dom.meRem.textContent = fmtMass(rem.mass_solar);
   dom.meSpin.textContent = fmt(rem.final_spin_chi, 3);
   dom.meFqnm.textContent = fmt(rem.ringdown_f22_hz, 1, ' Hz');
   dom.meTau.textContent = fmtDuration(rem.ringdown_tau_s);
@@ -837,7 +865,7 @@ const PRESETS = {
   '50,50': { m1: 50, m2: 50, name: 'Equal mass', note: 'q = 1 · maximum energy radiated for M' },
   '4300000,3500000': {
     m1: 4.3e6, m2: 3.5e6, name: 'Sgr A* — Milky Way center',
-    note: '7.7µHz LISA-band chirp · ~2-day inspiral · horizon ≈ 17 AU each',
+    note: '133 µHz LISA-band chirp · ~51 h inspiral · horizons ≈ 12.7 + 10.3 AU',
   },
 };
 
@@ -927,15 +955,16 @@ const DEBUG_MODES = 3; // 0 final · 1 escape direction · 2 transmittance
 ctrlM1.addEventListener('input', () => {
   applyMassReadouts();
   syncPresetToSliders();
-  sendToWorker({ type: 'setMasses', m1: Number(ctrlM1.value), m2: Number(ctrlM2.value) });
+  // Live mutation mid-inspiral (no reset) with the slider's log-scale mass.
+  sendToWorker({ type: 'setMasses', m1: sliderToMass(ctrlM1.value), m2: sliderToMass(ctrlM2.value) });
 });
 ctrlM2.addEventListener('input', () => {
   applyMassReadouts();
   syncPresetToSliders();
-  sendToWorker({ type: 'setMasses', m1: Number(ctrlM1.value), m2: Number(ctrlM2.value) });
+  sendToWorker({ type: 'setMasses', m1: sliderToMass(ctrlM1.value), m2: sliderToMass(ctrlM2.value) });
 });
 ctrlTimeScale.addEventListener('input', () => {
-  timeScaleUI = Number(ctrlTimeScale.value);
+  timeScaleUI = sliderToTimeScale(ctrlTimeScale.value);
   applyTimeScaleReadouts();
   sendToWorker({ type: 'setTimeScale', value: timeScaleUI });
 });
@@ -958,8 +987,9 @@ ctrlStarSeed.addEventListener('input', () => {
 ctrlPreset.addEventListener('change', () => {
   const p = PRESETS[ctrlPreset.value];
   if (!p) return;
-  ctrlM1.value = String(p.m1);
-  ctrlM2.value = String(p.m2);
+  // Position the log-scale sliders for this preset's masses.
+  ctrlM1.value = String(massToSlider(p.m1));
+  ctrlM2.value = String(massToSlider(p.m2));
   applyMassReadouts();
   applyPresetReadout();
   // A preset is a new system — restart the run with those masses and a clean
@@ -981,7 +1011,7 @@ btnRestart.addEventListener('click', () => {
   drawChirpChart();
   applyMassReadouts();
   applyTimeScaleReadouts();
-  sendToWorker({ type: 'restart', m1: Number(ctrlM1.value), m2: Number(ctrlM2.value) });
+  sendToWorker({ type: 'restart', m1: sliderToMass(ctrlM1.value), m2: sliderToMass(ctrlM2.value) });
 });
 
 // ─── Keyboard shortcuts (space = pause, R = restart, C = cycle debug) ────────

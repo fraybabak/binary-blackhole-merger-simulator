@@ -29,12 +29,26 @@ const C = 299792458.0; // m s⁻¹
 const MSUN = 1.98892e30; // kg
 const T_G = (G * MSUN) / C ** 3; // 4.9255e-6 s — geometric time unit
 const KM_GEO = (G * MSUN) / C ** 2 / 1e3; // 1.4766 km — geometric length unit
-// Luminosity distance of the displayed source: 410 Mpc (GW150914's distance),
-// converted once into geometric length units for the strain formula.
-const D_LUM = (410 * 3.0857e22) / ((G * MSUN) / C ** 2);
+// Luminosity distance of the displayed source, in geometric length units.
+// Stellar-mass runs display at GW150914's 410 Mpc; supermassive (Sgr A*-class)
+// runs display at the Galactic-center distance, 8 kpc ≈ 26,000 ly — where
+// such a merger would actually be observed from Earth.
+const MPC = 3.0857e22; // meters per megaparsec
+const KPC = 3.0857e19; // meters per kiloparsec
+const D_LUM_STELLAR = (410 * MPC) / ((G * MSUN) / C ** 2);
+const D_LUM_SMBH = (8 * KPC) / ((G * MSUN) / C ** 2);
+// Threshold separating the two display regimes: total mass above this reads
+// as a Galactic-center-like event.
+const M_SMBH_THRESHOLD = 1e5; // M☉
 const RESPONSE = 0.5; // orientation-averaged detector response folded into the displayed strain
 
-// ─── Simulation parameters (all documented magic numbers) ───────────────────
+// Current display distance for the strain formula (recomputed with the masses).
+let dLum = D_LUM_STELLAR;
+
+function currentDLum() {
+  return M >= M_SMBH_THRESHOLD ? D_LUM_SMBH : D_LUM_STELLAR;
+}
+
 // ─── Simulation parameters (all documented magic numbers) ───────────────────
 // Inspiral entry frequency is MASS-RELATIVE: f_start = START_F_FACTOR / M.
 // At M = 65 M☉ this is exactly 16 Hz (just below the LIGO band, matching
@@ -170,7 +184,7 @@ function mergerSetup() {
   tauFlare = Math.max(tauQNM, 0.4);
   phi0 = 2 * theta; // l=2 mode aligned with the binary axis at contact
   const omegaC = Math.sqrt(M / (r * r * r));
-  hContact = (4 * Math.pow(chirp, 5 / 3) * Math.pow(omegaC, 2 / 3) * RESPONSE) / D_LUM;
+  hContact = (4 * Math.pow(chirp, 5 / 3) * Math.pow(omegaC, 2 / 3) * RESPONSE) / currentDLum();
   LContact = 300 * Math.pow(M / 65, 2); // display cap ≈ GW150914-class peak luminosity
 }
 
@@ -295,7 +309,7 @@ function pack() {
   // Strain: h ≈ 4·M_c^{5/3}(πf)^{2/3}/D at 410 Mpc (× orientation response).
   s[SNAPSHOT.STRAIN] =
     phase <= 1
-      ? (4 * Math.pow(chirp, 5 / 3) * Math.pow(omega, 2 / 3) * RESPONSE) / D_LUM
+      ? (4 * Math.pow(chirp, 5 / 3) * Math.pow(omega, 2 / 3) * RESPONSE) / currentDLum()
       : hContact * Math.exp(-tRingP / tauQNM);
   s[SNAPSHOT.DISK_TIME] = wallRun;
 
