@@ -46,7 +46,7 @@ await page.selectOption('#ctrl-preset', '4300000,3500000');
 await page.waitForFunction(
   () => document.getElementById('phase-badge').textContent === 'INSPIRAL',
   { timeout: 10000 },
-).then(() => true).catch(() => {});
+).then(() => true).catch(() => { });
 await page.fill('#ctrl-timescale', '30');
 await page.dispatchEvent('#ctrl-timescale', 'input');
 await page.waitForTimeout(2500);
