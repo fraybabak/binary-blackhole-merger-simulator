@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Binary Black Hole Merger Simulator</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <canvas id="scene"></canvas>
+
+    <!-- ─── HUD: live telemetry from the physics worker ─── -->
+    <aside class="panel hud" id="hud" aria-label="Telemetry">
+      <header>
+        <h1>BINARY COALESCENCE</h1>
+        <div class="phase-badge" id="phase-badge">INSPIRAL</div>
+      </header>
+
+      <div class="hud-subtitle">
+        <span id="hud-model">M₁ 36 M☉ + M₂ 29 M☉</span>
+        <span class="dot">·</span>
+        <span id="hud-time-scale-ro">0.030× time</span>
+      </div>
+
+      <div class="coalescence">
+        <div class="coalescence-head">
+          <span>COALESCENCE</span>
+          <span id="coalescence-pct">0.0%</span>
+        </div>
+        <div class="coalescence-track">
+          <div class="coalescence-fill" id="coalescence-fill"></div>
+          <div class="coalescence-marker" id="coalescence-marker"></div>
+        </div>
+        <div class="coalescence-scale">
+          <span>inspiral start</span>
+          <span class="scale-mid">horizons touching · 85%</span>
+          <span>merged · 100%</span>
+        </div>
+      </div>
+
+      <div class="hud-grid">
+        <div class="metric">
+          <label>Separation</label>
+          <span class="metric-value" id="m-sep">—</span>
+          <span class="metric-sub" id="m-sep-sub">—</span>
+        </div>
+        <div class="metric">
+          <label>GW frequency</label>
+          <span class="metric-value" id="m-fgw">—</span>
+          <span class="metric-sub" id="m-fgw-sub">—</span>
+        </div>
+        <div class="metric">
+          <label>Orbital speed</label>
+          <span class="metric-value" id="m-vorb">—</span>
+          <span class="metric-sub" id="m-vorb-sub">—</span>
+        </div>
+        <div class="metric">
+          <label>Time to coalescence</label>
+          <span class="metric-value" id="m-tc">—</span>
+          <span class="metric-sub" id="m-tc-sub">—</span>
+        </div>
+        <div class="metric">
+          <label>Strain h (410 Mpc)</label>
+          <span class="metric-value" id="m-strain">—</span>
+          <span class="metric-sub" id="m-strain-sub">—</span>
+        </div>
+        <div class="metric">
+          <label>Chirp mass</label>
+          <span class="metric-value" id="m-chirp">—</span>
+          <span class="metric-sub" id="m-chirp-sub">—</span>
+        </div>
+        <div class="metric">
+          <label>Energy radiated</label>
+          <span class="metric-value" id="m-erad">—</span>
+          <span class="metric-sub" id="m-erad-sub">—</span>
+        </div>
+        <div class="metric">
+          <label>GW luminosity</label>
+          <span class="metric-value" id="m-lum">—</span>
+          <span class="metric-sub" id="m-lum-sub">—</span>
+        </div>
+        <div class="metric">
+          <label>Remnant mass</label>
+          <span class="metric-value" id="m-rem">—</span>
+          <span class="metric-sub" id="m-rem-sub">—</span>
+        </div>
+        <div class="metric">
+          <label>Final spin χf</label>
+          <span class="metric-value" id="m-spin">—</span>
+          <span class="metric-sub" id="m-spin-sub">—</span>
+        </div>
+        <div class="metric">
+          <label>Sim time (physical)</label>
+          <span class="metric-value" id="m-simtime">—</span>
+          <span class="metric-sub" id="m-simtime-sub">—</span>
+        </div>
+        <div class="metric">
+          <label>Time scale</label>
+          <span class="metric-value" id="m-timescale">—</span>
+          <span class="metric-sub" id="m-timescale-sub">—</span>
+        </div>
+        <div class="metric">
+          <label>Horizons R₁ / R₂</label>
+          <span class="metric-value" id="m-horizons">—</span>
+          <span class="metric-sub" id="m-horizons-sub">—</span>
+        </div>
+        <div class="metric">
+          <label>Orbits remaining</label>
+          <span class="metric-value" id="m-orbits">—</span>
+          <span class="metric-sub" id="m-orbits-sub">—</span>
+        </div>
+      </div>
+
+      <div class="chirp-chart">
+        <div class="chirp-chart-head">
+          <span>GW CHIRP ENVELOPE</span>
+          <span class="chirp-legend">
+            <i class="swatch swatch-h"></i><span id="chirp-legend-h">strain h</span>
+            <i class="swatch swatch-f"></i><span id="chirp-legend-f">f<sub>GW</sub></span>
+          </span>
+        </div>
+        <div class="chirp-canvas-wrap">
+          <canvas id="chirp-canvas"></canvas>
+          <!-- Gridline value labels (left edge), rendered as DOM for crisp text -->
+          <span class="axis-label" id="chirp-y-top">—</span>
+          <span class="axis-label" id="chirp-y-mid">—</span>
+          <span class="axis-label" id="chirp-y-bot">10 Hz</span>
+          <!-- Live "now" readout pinned to the leading edge of the trace -->
+          <span class="now-label" id="chirp-now-h">—</span>
+          <span class="now-label now-label-f" id="chirp-now-f">—</span>
+          <!-- Merger moment marker: dropped onto the chart at contact -->
+          <span class="merger-marker" id="chirp-merger-x">MERGER</span>
+        </div>
+        <div class="chirp-scale">
+          <span id="chirp-start">—</span>
+          <span>LIGO band from 10 Hz</span>
+          <span id="chirp-end">now</span>
+        </div>
+      </div>
+
+      <!-- ─── Merger event capture: frozen full data snapshot at contact ─── -->
+      <section class="merger-event" id="merger-event" hidden>
+        <header class="merger-event-head">
+          <span class="merger-event-title">◈ MERGER EVENT CAPTURED</span>
+          <button type="button" class="merger-event-close" id="merger-event-close" aria-label="Close">×</button>
+        </header>
+        <div class="merger-event-time" id="merger-event-time">t = —</div>
+        <div class="merger-event-grid">
+          <div class="merger-metric">
+            <label>Peak GW frequency</label>
+            <span id="me-fgw">—</span>
+          </div>
+          <div class="merger-metric">
+            <label>Peak strain h</label>
+            <span id="me-strain">—</span>
+          </div>
+          <div class="merger-metric">
+            <label>Peak luminosity</label>
+            <span id="me-lum">—</span>
+          </div>
+          <div class="merger-metric">
+            <label>Orbital speed at contact</label>
+            <span id="me-vorb">—</span>
+          </div>
+          <div class="merger-metric">
+            <label>Separation at contact</label>
+            <span id="me-sep">—</span>
+          </div>
+          <div class="merger-metric">
+            <label>Energy radiated to contact</label>
+            <span id="me-erad">—</span>
+          </div>
+          <div class="merger-metric">
+            <label>Total energy radiated</label>
+            <span id="me-erad-total">—</span>
+          </div>
+          <div class="merger-metric">
+            <label>Remnant mass</label>
+            <span id="me-rem">—</span>
+          </div>
+          <div class="merger-metric">
+            <label>Final spin χf</label>
+            <span id="me-spin">—</span>
+          </div>
+          <div class="merger-metric">
+            <label>Ringdown f₂₂</label>
+            <span id="me-fqnm">—</span>
+          </div>
+          <div class="merger-metric">
+            <label>Ringdown τ</label>
+            <span id="me-tau">—</span>
+          </div>
+          <div class="merger-metric">
+            <label>Time in LIGO band</label>
+            <span id="me-bandtime">—</span>
+          </div>
+        </div>
+        <button type="button" class="merger-export" id="merger-export">⤓ Export data (JSON)</button>
+      </section>
+
+      <details class="hud-about">
+        <summary>What am I looking at?</summary>
+        <p>
+          Two black holes inspiral as they emit gravitational waves, losing
+          orbital energy to the point of coalescence. Real astrophysical
+          binaries take millions of years, but once inside the LIGO band the
+          final plunge lasts only fractions of a second — this run stretches
+          it to a watchable timescale. The ringed glow is the accretion disk,
+          the black shadows are the event horizons, and the light arcs are
+          real gravitational lensing of the background star field.
+        </p>
+        <p>
+          The default 36 + 29 M☉ binary reproduces <b>GW150914</b> — the
+          first gravitational-wave detection: 28.1 M☉ chirp mass, ≈3 M☉c²
+          radiated, a 62 M☉ remnant spinning at χf ≈ 0.68.
+        </p>
+      </details>
+    </aside>
+
+    <!-- ─── Controls ─── -->
+    <aside class="panel controls" id="controls" aria-label="Controls">
+      <h2>CONTROLS</h2>
+
+      <div class="control-group">
+        <label for="ctrl-preset">System preset</label>
+        <select id="ctrl-preset">
+          <option value="36,29" selected>GW150914 — first detection (36+29)</option>
+          <option value="65,45">GW150914-BHSP — high mass</option>
+          <option value="30,25">GW170104 — 30+25</option>
+          <option value="14,8">GW170608 — low mass (14+8)</option>
+          <option value="50,50">Equal mass — 50+50</option>
+          <option value="4300000,3500000">Sgr A* — Milky Way center</option>
+        </select>
+        <span class="ctrl-readout" id="ro-preset">
+          GW150914: 28.1 M☉ chirp · remnant ≈62 M☉ · χf ≈0.68
+        </span>
+      </div>
+
+      <div class="control-group">
+        <label for="ctrl-m1">Primary mass M₁ <span class="log-hint">(log scale)</span></label>
+        <input type="range" id="ctrl-m1" min="0" max="1000" step="1" value="523" />
+        <span class="ctrl-readout" id="ro-m1">36 M☉</span>
+        <span class="ctrl-sub" id="ro-m1-sub">horizon 106 km · ISCO 638 km</span>
+      </div>
+
+      <div class="control-group">
+        <label for="ctrl-m2">Secondary mass M₂ <span class="log-hint">(log scale)</span></label>
+        <input type="range" id="ctrl-m2" min="0" max="1000" step="1" value="497" />
+        <span class="ctrl-readout" id="ro-m2">29 M☉</span>
+        <span class="ctrl-sub" id="ro-m2-sub">horizon 86 km · ISCO 513 km</span>
+      </div>
+
+      <div class="control-group">
+        <label for="ctrl-timescale">Time scale</label>
+        <input
+          type="range"
+          id="ctrl-timescale"
+          min="0"
+          max="10000"
+          step="10"
+          value="30"
+        />
+        <span class="ctrl-readout" id="ro-timescale">0.030× — slow motion</span>
+        <span class="ctrl-sub" id="ro-timescale-sub">
+          1 real second advances 33 physical seconds
+        </span>
+      </div>
+
+      <div class="control-group">
+        <label for="ctrl-disk">Accretion disks</label>
+        <input type="checkbox" id="ctrl-disk" checked />
+        <span class="ctrl-readout" id="ro-disk">on</span>
+        <span class="ctrl-sub" id="ro-disk-sub">
+          Doppler-beamed plasma; toggle off for bare shadows
+        </span>
+      </div>
+
+      <div class="control-group">
+        <label for="ctrl-quality">Lensing quality</label>
+        <select id="ctrl-quality">
+          <option value="low" selected>Low — 160 steps · fastest</option>
+          <option value="medium">Medium — 256 steps · balanced</option>
+          <option value="high">High — 384 steps · sharpest rings</option>
+        </select>
+        <span class="ctrl-sub" id="ro-quality-sub">
+          raymarch budget per pixel; the dominant GPU cost
+        </span>
+      </div>
+
+      <div class="control-group">
+        <label for="ctrl-starseed">Star seed</label>
+        <input type="range" id="ctrl-starseed" min="0" max="200" step="1" value="42" />
+        <span class="ctrl-readout" id="ro-starseed">42</span>
+        <span class="ctrl-sub" id="ro-starseed-sub">
+          swaps the procedural background sky variant
+        </span>
+      </div>
+
+      <div class="control-group buttons">
+        <button id="btn-pause" type="button">⏸ Pause</button>
+        <button id="btn-restart" type="button">↺ Restart</button>
+      </div>
+
+      <p class="controls-hint">
+        <b>Space</b> pause · <b>R</b> restart · <b>C</b> debug views ·
+        drag to orbit · scroll to zoom
+      </p>
+    </aside>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

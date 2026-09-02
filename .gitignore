@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Vite / build tooling caches
+.vite/
+*.tsbuildinfo
+
+# Test artifacts (screenshots produced by the headless check scripts)
+shot-*.png
+hud-shot.png
+
+# Environment files (no secrets required by this project — everything is
+# procedural — but ignore them anyway in case secrets are ever added locally)
+.env
+.env.*
+!.env.example
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
