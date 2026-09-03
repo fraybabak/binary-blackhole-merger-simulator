@@ -4,6 +4,8 @@ An interactive, real-time WebGL simulation of two black holes spiraling into
 each other and merging — visually grounded in General Relativity and
 numerically anchored to **GW150914**, the first gravitational-wave detection.
 
+**Live demo:** [glittering-duckanoo-b3ade7.netlify.app](https://glittering-duckanoo-b3ade7.netlify.app/)
+
 ![Inspiral — two black holes orbiting with accretion disks and gravitational
 lensing](docs/screenshot-inspiral.png)
 
@@ -194,6 +196,29 @@ build`, output: `dist/`).
 npm i -g vercel
 vercel          # preview deploy
 vercel --prod   # production deploy
+```
+
+## Deploy to Netlify
+
+This project is deployed and live on Netlify:
+
+**https://glittering-duckanoo-b3ade7.netlify.app/**
+
+To deploy your own copy:
+
+**Via the Netlify dashboard / Git integration (recommended):**
+1. Push this repository to GitHub/GitLab/Bitbucket.
+2. In Netlify: *Add new site → Import an existing project* → pick the repo.
+3. Netlify auto-detects Vite from `package.json` — build command
+   `npm run build`, publish directory `dist/`. Click **Deploy**.
+   No environment variables needed; everything is procedural and
+   self-contained (no external assets or APIs).
+
+**Via the Netlify CLI:**
+```bash
+npm i -g netlify-cli
+netlify deploy --build          # preview deploy
+netlify deploy --build --prod   # production deploy
 ```
 
 ## Controls
